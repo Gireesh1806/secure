@@ -21,7 +21,9 @@ import pyotp
 import qrcode
 import io
 import base64
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model, model_from_config
+import h5py
+import json
 import jwt
 import requests
 import re
@@ -63,6 +65,43 @@ login_manager.login_view = 'login'
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# Custom model loader to fix invalid layer names
+def load_model_with_fixed_names(filepath):
+    try:
+        with h5py.File(filepath, 'r') as f:
+            model_config = f.attrs.get('model_config')
+            if not model_config:
+                raise ValueError("No model configuration found in HDF5 file")
+            
+            # Parse the config
+            config = json.loads(model_config)
+            
+            # Fix layer names in the config
+            for layer in config['config']['layers']:
+                if 'name' in layer['config'] and '/' in layer['config']['name']:
+                    old_name = layer['config']['name']
+                    new_name = old_name.replace('/', '_')
+                    print(f"Renaming layer: {old_name} -> {new_name}")
+                    layer['config']['name'] = new_name
+            
+            # Create model from modified config
+            model = model_from_config(config)
+            
+            # Load weights
+            model.load_weights(filepath)
+            return model
+    except Exception as e:
+        print(f"Error loading model with fixed names: {str(e)}")
+        return None
+
+# Load the Keras model at startup
+try:
+    model = load_model_with_fixed_names('models/model_ela.h5')
+    print("Model loaded successfully at startup")
+except Exception as e:
+    print(f"Failed to load model: {str(e)}")
+    model = None  # Handle gracefully
 
 # Models
 class User(db.Model, UserMixin):
@@ -368,31 +407,38 @@ def dashboard():
             is_outdoor=form.is_outdoor.data
         )
 
-        model = load_model('models/model_ela.h5')
-        np_img, ela_img = prepare_image_for_ela(filepath)
-        prediction = model.predict(np_img, verbose=0)
-        class_ela = ['Real', 'Tampered']
-        predicted_class = class_ela[np.argmax(prediction[0])]
-        confidence = round(np.max(prediction[0]) * 100)
-        image.analysis_result = f"Model indicates {confidence}% confidence that image is {predicted_class}"
+        if model is None:
+            flash('Model not available. Please contact support.', 'danger')
+            return redirect(url_for('dashboard'))
 
-        ela_filename = f"ela_{unique_filename}"
-        ela_filepath = os.path.join(app.config['UPLOAD_FOLDER'], ela_filename)
-        ela_img.save(ela_filepath)
-        image.ela_filepath = ela_filepath
+        try:
+            np_img, ela_img = prepare_image_for_ela(filepath)
+            prediction = model.predict(np_img, verbose=0)
+            class_ela = ['Real', 'Tampered']
+            predicted_class = class_ela[np.argmax(prediction[0])]
+            confidence = round(np.max(prediction[0]) * 100)
+            image.analysis_result = f"Model indicates {confidence}% confidence that image is {predicted_class}"
 
-        if form.is_outdoor.data:
-            date_time, lat, lon, is_valid = image_coordinates(filepath)
-            if is_valid and lat and lon:
-                location, date, weather = get_weather(date_time, lat, lon)
-                image.weather_result = f"Image taken at {location} on {date} with {weather}"
-                image.latitude = lat
-                image.longitude = lon
-                image.location = location
+            ela_filename = f"ela_{unique_filename}"
+            ela_filepath = os.path.join(app.config['UPLOAD_FOLDER'], ela_filename)
+            ela_img.save(ela_filepath)
+            image.ela_filepath = ela_filepath
 
-        db.session.add(image)
-        db.session.commit()
-        flash('Image analyzed successfully.', 'success')
+            if form.is_outdoor.data:
+                date_time, lat, lon, is_valid = image_coordinates(filepath)
+                if is_valid and lat and lon:
+                    location, date, weather = get_weather(date_time, lat, lon)
+                    image.weather_result = f"Image taken at {location} on {date} with {weather}"
+                    image.latitude = lat
+                    image.longitude = lon
+                    image.location = location
+
+            db.session.add(image)
+            db.session.commit()
+            flash('Image analyzed successfully.', 'success')
+        except Exception as e:
+            flash(f'Error analyzing image: {str(e)}', 'danger')
+            return redirect(url_for('dashboard'))
 
     images = Image.query.filter_by(user_id=current_user.id).order_by(Image.upload_date.desc()).limit(10).all()
     return render_template('dashboard.html', form=form, images=images, is_premium=current_user.is_premium_user(), current_year=datetime.utcnow().year)
