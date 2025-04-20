@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome{% endblock %}
+
+{% block content %}
+<style>
+    .hero {
+        text-align: center;
+        padding: 3rem 0;
+    }
+
+    .hero h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: #2c3e50;
+    }
+
+    .hero p {
+        font-size: 1.2rem;
+        margin-bottom: 2rem;
+        color: #555;
+    }
+
+    .hero .btn {
+        display: inline-block;
+        margin: 0 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .hero h1 {
+            font-size: 2rem;
+        }
+
+        .hero p {
+            font-size: 1rem;
+        }
+    }
+</style>
+
+<div class="hero">
+    <h1>Welcome to Image Tampering Detection</h1>
+    <p>Analyze your images for authenticity with our advanced AI-powered tools. Secure, fast, and reliable.</p>
+    <a href="{{ url_for('login') }}" class="btn"><button>Login</button></a>
+    <a href="{{ url_for('register') }}" class="btn"><button>Register</button></a>
+</div>
+{% endblock %}

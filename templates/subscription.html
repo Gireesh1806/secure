@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Subscription{% endblock %}
+
+{% block content %}
+<style>
+    .subscription {
+        background: #fff;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .subscription h2 {
+        margin-bottom: 1.5rem;
+        color: #2c3e50;
+    }
+
+    .plans {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .plan {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 1.5rem;
+        background: #f9f9f9;
+        transition: transform 0.2s;
+    }
+
+    .plan:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .plan h3 {
+        color: #2c3e50;
+        margin-bottom: 1rem;
+    }
+
+    .plan p {
+        margin-bottom: 1rem;
+        color: #555;
+    }
+
+    .plan button {
+        width: 100%;
+    }
+
+    .status {
+        font-weight: bold;
+        margin-bottom: 1rem;
+        color: {{ '#27ae60' if is_premium else '#e74c3c' }};
+    }
+</style>
+
+<div class="subscription">
+    <h2>Choose Your Subscription Plan</h2>
+    <p class="status">Current Status: {{ 'Premium' if is_premium else 'Free' }}</p>
+    {% if is_premium %}
+        <p>You are already a premium user. Enjoy unlimited image uploads!</p>
+    {% else %}
+        <div class="plans">
+            {% for plan in plans %}
+                <div class="plan">
+                    <h3>{{ plan.name }}</h3>
+                    <p>${{ plan.price }} / {{ plan.duration }}</p>
+                    <button onclick="subscribe('{{ plan.name }}')">Select Plan</button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+    const stripe = Stripe('{{ key }}');
+
+    function subscribe(planName) {
+        fetch('{{ url_for("create_checkout_session") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                'plan_name': planName
+            })
+        })
+        .then(response => response.json())
+        .then(session => {
+            return stripe.redirectToCheckout({ sessionId: session.id });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to initiate checkout. Please try again.');
+        });
+    }
+</script>
+{% endblock %}

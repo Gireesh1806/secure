@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'MFA Setup' if setup else 'MFA Verification' }}{% endblock %}
+
+{% block content %}
+<style>
+    .mfa-form {
+        max-width: 400px;
+        margin: 2rem auto;
+        background: #fff;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .mfa-form h2 {
+        margin-bottom: 1.5rem;
+        color: #2c3e50;
+    }
+
+    .qr-code {
+        margin: 1rem 0;
+    }
+
+    .qr-code img {
+        max-width: 200px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+</style>
+
+<div class="mfa-form">
+    <h2>{{ 'Set Up MFA' if setup else 'Verify MFA' }}</h2>
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        {% if setup %}
+            <p>Scan this QR code with your authenticator app:</p>
+            <div class="qr-code">
+                <img src="data:image/png;base64,{{ qr_code }}" alt="MFA QR Code">
+            </div>
+            <p>Then enter the code below:</p>
+        {% endif %}
+        <div class="form-group">
+            {{ form.token.label }}
+            {{ form.token(placeholder="Enter 6-digit code") }}
+            {% if form.token.errors %}
+                <div class="error">{{ form.token.errors[0] }}</div>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            {{ form.submit }}
+        </div>
+    </form>
+</div>
+{% endblock %}

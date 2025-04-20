@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<style>
+    .auth-form {
+        max-width: 400px;
+        margin: 2rem auto;
+        background: #fff;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .auth-form h2 {
+        text-align: center;
+        margin-bottom: 1.5rem;
+        color: #2c3e50;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .password-requirements {
+        font-size: 0.9rem;
+        color: #555;
+        margin-bottom: 1rem;
+    }
+
+    .error {
+        color: #e74c3c;
+        font-size: 0.9rem;
+    }
+</style>
+
+<div class="auth-form">
+    <h2>Register</h2>
+    <form method="POST" id="register-form">
+        {{ form.hidden_tag() }}
+        <div class="form-group">
+            {{ form.username.label }}
+            {{ form.username }}
+            {% if form.username.errors %}
+                <div class="error">{{ form.username.errors[0] }}</div>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            {{ form.email.label }}
+            {{ form.email }}
+            {% if form.email.errors %}
+                <div class="error">{{ form.email.errors[0] }}</div>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            {{ form.password.label }}
+            {{ form.password }}
+            {% if form.password.errors %}
+                <div class="error">{{ form.password.errors[0] }}</div>
+            {% endif %}
+            <div class="password-requirements">
+                Password must be at least 12 characters long and include:
+                <ul>
+                    <li>One uppercase letter</li>
+                    <li>One lowercase letter</li>
+                    <li>One number</li>
+                    <li>One special character (@$!%*?&)</li>
+                </ul>
+            </div>
+        </div>
+        <div class="form-group">
+            {{ form.confirm_password.label }}
+            {{ form.confirm_password }}
+            {% if form.confirm_password.errors %}
+                <div class="error">{{ form.confirm_password.errors[0] }}</div>
+            {% endif %}
+        </div>
+        {% if is_production %}
+            <div class="form-group">
+                <input type="hidden" name="recaptcha" id="recaptcha-token">
+                <div class="error" id="recaptcha-error" style="display: none;">Please complete the reCAPTCHA verification.</div>
+            </div>
+        {% endif %}
+        <div class="form-group">
+            {{ form.submit }}
+        </div>
+    </form>
+    <p style="text-align: center; margin-top: 1rem;">
+        Already have an account? <a href="{{ url_for('login') }}">Login</a>
+    </p>
+</div>
+
+{% if is_production %}
+    <script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}"></script>
+    <script>
+        document.getElementById('register-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!window.grecaptcha) {
+                document.getElementById('recaptcha-error').style.display = 'block';
+                document.getElementById('recaptcha-error').textContent = 'reCAPTCHA not loaded. Please check your network or disable ad-blockers.';
+                return;
+            }
+            grecaptcha.ready(function() {
+                grecaptcha.execute('{{ recaptcha_site_key }}', {action: 'register'})
+                    .then(function(token) {
+                        document.getElementById('recaptcha-token').value = token;
+                        document.getElementById('recaptcha-error').style.display = 'none';
+                        document.getElementById('register-form').submit();
+                    })
+                    .catch(function(error) {
+                        console.error('reCAPTCHA error:', error);
+                        document.getElementById('recaptcha-error').style.display = 'block';
+                        document.getElementById('recaptcha-error').textContent = 'reCAPTCHA verification failed. Please try again.';
+                    });
+            });
+        });
+    </script>
+{% endif %}
+{% endblock %}
