@@ -1,6 +1,10 @@
 import os
-import stripe
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Disable GPU to avoid CUDA errors
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Suppress TensorFlow warnings
+
 from dotenv import load_dotenv
+load_dotenv()
+
 import numpy as np
 from PIL import Image as img
 import cv2
@@ -27,22 +31,20 @@ import json
 import jwt
 import requests
 import re
-
-# Load environment variables
-load_dotenv()
+import stripe
 
 # Initialize Flask app
 app = Flask(__name__)
 instance_path = os.path.join(os.path.dirname(__file__), 'instance')
 os.makedirs(instance_path, exist_ok=True)
 
-# Determine environment (development or production)
-ENV = os.getenv('FLASK_ENV', 'development')  # Default to development if not set
+# Determine environment
+ENV = os.getenv('FLASK_ENV', 'development')
 IS_PRODUCTION = ENV == 'production'
 
 app.config.update(
     SECRET_KEY=os.getenv('SECRET_KEY', 'your-secret-key'),
-    SQLALCHEMY_DATABASE_URI='postgresql://secure_database_user:f8h1Rf8bYDGiA3Lwttef7kgDFRT68p2t@dpg-d02g5kje5dus73bonol0-a/secure_database',
+    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', 'postgresql://user:password@localhost/dbname'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     UPLOAD_FOLDER='static/uploads',
     ALLOWED_EXTENSIONS={'jpg', 'jpeg'},
@@ -96,12 +98,17 @@ def load_model_with_fixed_names(filepath):
         return None
 
 # Load the Keras model at startup
+model = None
 try:
     model = load_model_with_fixed_names('models/model_ela.h5')
     print("Model loaded successfully at startup")
+    # Test model with dummy input
+    if model is not None:
+        dummy_input = np.zeros((1, 128, 128, 3))
+        prediction = model.predict(dummy_input, verbose=0)
+        print("Model test prediction successful")
 except Exception as e:
     print(f"Failed to load model: {str(e)}")
-    model = None  # Handle gracefully
 
 # Models
 class User(db.Model, UserMixin):
@@ -240,10 +247,10 @@ class ImageForm(FlaskForm):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# reCAPTCHA verification (only in production)
+# reCAPTCHA verification
 def verify_recaptcha(token):
     if not IS_PRODUCTION:
-        return True  # Bypass in development
+        return True
     response = requests.post(
         'https://www.google.com/recaptcha/api/siteverify',
         data={
@@ -254,7 +261,7 @@ def verify_recaptcha(token):
     result = response.json()
     return result.get('success', False) and result.get('score', 0) >= 0.5
 
-# Routes with current_year added to all render_template calls
+# Routes
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -381,6 +388,9 @@ def dashboard():
             logout_user()
             flash('Invalid session. Please log in again.', 'warning')
             return redirect(url_for('login'))
+
+    if model is None:
+        flash('Image analysis is currently unavailable due to model loading issues. Please contact support.', 'danger')
 
     form = ImageForm()
     config = Config.query.first() or Config(free_image_limit=5)
@@ -542,4 +552,4 @@ with app.app_context():
         db.session.commit()
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(port=5000, debug=not IS_PRODUCTION)
