@@ -62,10 +62,10 @@ rsa==4.9
 six==1.16.0
 SQLAlchemy==2.0.34
 stripe==10.12.0
-tensorboard==2.12.3
-tensorboard-data-server==0.7.2
+tensorboard
+tensorboard-data-server
 tensorflow
-tensorflow-estimator==2.12.0
+tensorflow-estimator
 termcolor==2.4.0
 typing-extensions==4.12.2
 urllib3==2.2.2
