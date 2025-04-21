@@ -21,7 +21,6 @@ import pyotp
 import qrcode
 import io
 import base64
-from tensorflow.keras.models import load_model
 import jwt
 import requests
 import re
@@ -35,24 +34,24 @@ instance_path = os.path.join(os.path.dirname(__file__), 'instance')
 os.makedirs(instance_path, exist_ok=True)
 
 # Determine environment (development or production)
-ENV = os.getenv('FLASK_ENV', 'production')  # Default to development if not set
+ENV = os.getenv('FLASK_ENV', 'development')  # Default to development if not set
 IS_PRODUCTION = ENV == 'production'
 
 app.config.update(
-    SECRET_KEY=os.getenv('SECRET_KEY', 'your-secret-key'),
+    SECRET_KEY="eb5309bed65e17d8c9ac293f2e245f6ab30979d69e338dd3",
     SQLALCHEMY_DATABASE_URI='postgresql://secure_database_user:f8h1Rf8bYDGiA3Lwttef7kgDFRT68p2t@dpg-d02g5kje5dus73bonol0-a.oregon-postgres.render.com/secure_database',
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     UPLOAD_FOLDER='static/uploads',
     ALLOWED_EXTENSIONS={'jpg', 'jpeg'},
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
-    JWT_SECRET_KEY=os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key'),
-    RECAPTCHA_SITE_KEY=os.getenv('RECAPTCHA_SITE_KEY') if IS_PRODUCTION else None,
-    RECAPTCHA_SECRET_KEY=os.getenv('RECAPTCHA_SECRET_KEY') if IS_PRODUCTION else None
+    JWT_SECRET_KEY="7127b70009319336c4c86b81a0c971efb2a650a83f2b4099",
+    RECAPTCHA_SITE_KEY="6LcFtRQrAAAAAHo-4F6DvBTyodOon_yq8j25LrU2" if IS_PRODUCTION else None,
+    RECAPTCHA_SECRET_KEY="6LcFtRQrAAAAAHJ8rA3_T-CUK0sfdbwTHZKhoWuh" if IS_PRODUCTION else None
 )
 
 # Stripe configuration
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+stripe.api_key = "sk_test_51RC1RnRAboKx3Wwpmr6xRe8zQHPCcwFhCDFvjruWLNh9Dd2qqcrcwKLYCUYEwO68doRsS5foR0onqAnzuYvGSi5U00VVU21Yd3"
+STRIPE_PUBLISHABLE_KEY = "pk_test_51RC1RnRAboKx3WwpoNrHgwMBOgJEC8oWYUwOW3DzRwCXVqITQYoj8xGs4myx8EsiVe5AeMm2XqHoVJTBMwPeJvPX00K2jj2zMV"
 
 # Initialize extensions
 db = SQLAlchemy(app)
@@ -368,6 +367,8 @@ def dashboard():
             is_outdoor=form.is_outdoor.data
         )
 
+        # Comment out model-related code
+        """
         model = load_model('models/model_ela.h5')
         np_img, ela_img = prepare_image_for_ela(filepath)
         prediction = model.predict(np_img, verbose=0)
@@ -380,6 +381,15 @@ def dashboard():
         ela_filepath = os.path.join(app.config['UPLOAD_FOLDER'], ela_filename)
         ela_img.save(ela_filepath)
         image.ela_filepath = ela_filepath
+        """
+
+        # Still perform ELA processing for visualization but without model prediction
+        _, ela_img = prepare_image_for_ela(filepath)
+        ela_filename = f"ela_{unique_filename}"
+        ela_filepath = os.path.join(app.config['UPLOAD_FOLDER'], ela_filename)
+        ela_img.save(ela_filepath)
+        image.ela_filepath = ela_filepath
+        image.analysis_result = "Image analysis disabled (model not loaded)."
 
         if form.is_outdoor.data:
             date_time, lat, lon, is_valid = image_coordinates(filepath)
@@ -391,8 +401,9 @@ def dashboard():
                 image.location = location
 
         db.session.add(image)
+        yet
         db.session.commit()
-        flash('Image analyzed successfully.', 'success')
+        flash('Image uploaded and processed successfully.', 'success')
 
     images = Image.query.filter_by(user_id=current_user.id).order_by(Image.upload_date.desc()).limit(10).all()
     return render_template('dashboard.html', form=form, images=images, is_premium=current_user.is_premium_user(), current_year=datetime.utcnow().year)
