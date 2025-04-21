@@ -90,7 +90,7 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRF-Token': csrfToken // Include CSRF token
+                'X-CSRF-Token': csrfToken
             },
             body: new URLSearchParams({
                 'plan_name': planName
@@ -98,7 +98,9 @@
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error('Network response was not ok: ' + response.statusText);
+                return response.json().then(err => {
+                    throw new Error(err.error || `HTTP error: ${response.status}`);
+                });
             }
             return response.json();
         })
@@ -112,7 +114,7 @@
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Failed to initiate checkout. Please try again.');
+            alert(`Failed to initiate checkout: ${error.message}`);
         });
     }
 </script>
