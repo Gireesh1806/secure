@@ -39,7 +39,7 @@ instance_path = os.path.join(os.path.dirname(__file__), 'instance')
 os.makedirs(instance_path, exist_ok=True)
 
 # Determine environment
-ENV = os.getenv('FLASK_ENV', 'development')
+ENV = os.getenv('FLASK_ENV', 'production')
 IS_PRODUCTION = ENV == 'production'
 
 app.config.update(
