@@ -24,6 +24,10 @@ import base64
 import jwt
 import requests
 import re
+import logging
+
+# Configure logging
+logging.basicConfig(filename='app.log', level=logging.DEBUG)
 
 # Load environment variables
 load_dotenv()
@@ -34,7 +38,7 @@ instance_path = os.path.join(os.path.dirname(__file__), 'instance')
 os.makedirs(instance_path, exist_ok=True)
 
 # Determine environment (development or production)
-ENV = os.getenv('FLASK_ENV', 'production')  # Default to development if not set
+ENV = os.getenv('FLASK_ENV', 'production')
 IS_PRODUCTION = ENV == 'production'
 
 app.config.update(
@@ -46,7 +50,9 @@ app.config.update(
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
     JWT_SECRET_KEY="7127b70009319336c4c86b81a0c971efb2a650a83f2b4099",
     RECAPTCHA_SITE_KEY="6LcFtRQrAAAAAHo-4F6DvBTyodOon_yq8j25LrU2" if IS_PRODUCTION else None,
-    RECAPTCHA_SECRET_KEY="6LcFtRQrAAAAAHJ8rA3_T-CUK0sfdbwTHZKhoWuh" if IS_PRODUCTION else None
+    RECAPTCHA_SECRET_KEY="6LcFtRQrAAAAAHJ8rA3_T-CUK0sfdbwTHZKhoWuh" if IS_PRODUCTION else None,
+    WTF_CSRF_FIELD_NAME='csrf_token',  # CSRF field name
+    WTF_CSRF_HEADERS=['X-CSRF-Token']  # Accept CSRF token in X-CSRF-Token header
 )
 
 # Stripe configuration
@@ -203,7 +209,7 @@ def load_user(user_id):
 # reCAPTCHA verification (only in production)
 def verify_recaptcha(token):
     if not IS_PRODUCTION:
-        return True  # Bypass in development
+        return True
     response = requests.post(
         'https://www.google.com/recaptcha/api/siteverify',
         data={
@@ -214,7 +220,7 @@ def verify_recaptcha(token):
     result = response.json()
     return result.get('success', False) and result.get('score', 0) >= 0.5
 
-# Routes with current_year added to all render_template calls
+# Routes
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -401,7 +407,6 @@ def dashboard():
                 image.location = location
 
         db.session.add(image)
-        yet
         db.session.commit()
         flash('Image uploaded and processed successfully.', 'success')
 
@@ -421,22 +426,24 @@ def subscription():
 @app.route('/create-checkout-session', methods=['POST'])
 @login_required
 def create_checkout_session():
+    logging.debug(f"Received request: {request.form}")
     plans = {
         'Weekly': {'price': 4.99, 'duration': timedelta(days=7)},
         'Monthly': {'price': 12.99, 'duration': timedelta(days=30)},
         'Yearly': {'price': 99.99, 'duration': timedelta(days=365)}
     }
 
-    plan_name = request.form.get('plan_name')
-    if plan_name not in plans:
-        flash('Invalid plan selected.', 'danger')
-        return redirect(url_for('subscription'))
-
-    if current_user.is_premium_user():
-        flash('You already have an active subscription.', 'info')
-        return redirect(url_for('dashboard'))
-
     try:
+        plan_name = request.form.get('plan_name')
+        logging.debug(f"Plan name: {plan_name}")
+        if not plan_name or plan_name not in plans:
+            logging.error(f"Invalid plan selected: {plan_name}")
+            return jsonify({'error': 'Invalid plan selected'}), 400
+
+        if current_user.is_premium_user():
+            logging.info(f"User {current_user.id} already has active subscription")
+            return jsonify({'error': 'You already have an active subscription'}), 400
+
         plan = plans[plan_name]
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
@@ -455,10 +462,14 @@ def create_checkout_session():
             cancel_url=url_for('subscription', _external=True),
             metadata={'user_id': current_user.id, 'plan_name': plan_name}
         )
+        logging.info(f"Created checkout session: {checkout_session.id}")
         return jsonify({'id': checkout_session.id})
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe error: {str(e)}")
+        return jsonify({'error': f'Stripe error: {str(e)}'}), 400
     except Exception as e:
-        flash(f'Error creating checkout session: {str(e)}', 'danger')
-        return redirect(url_for('subscription'))
+        logging.error(f"Server error: {str(e)}")
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/subscribe/<plan_name>')
 @login_required
