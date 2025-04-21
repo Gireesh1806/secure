@@ -76,23 +76,39 @@
     {% endif %}
 </div>
 
+<!-- Hidden input to store CSRF token -->
+<input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+
 <script src="https://js.stripe.com/v3/"></script>
 <script>
     const stripe = Stripe('{{ key }}');
 
     function subscribe(planName) {
+        const csrfToken = document.getElementById('csrf_token').value;
+
         fetch('{{ url_for("create_checkout_session") }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRF-Token': csrfToken // Include CSRF token
             },
             body: new URLSearchParams({
                 'plan_name': planName
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.statusText);
+            }
+            return response.json();
+        })
         .then(session => {
             return stripe.redirectToCheckout({ sessionId: session.id });
+        })
+        .then(result => {
+            if (result.error) {
+                alert(result.error.message);
+            }
         })
         .catch(error => {
             console.error('Error:', error);
