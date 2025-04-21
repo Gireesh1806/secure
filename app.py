@@ -1,10 +1,6 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Disable GPU to avoid CUDA errors
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Suppress TensorFlow warnings
-
+import stripe
 from dotenv import load_dotenv
-load_dotenv()
-
 import numpy as np
 from PIL import Image as img
 import cv2
@@ -25,26 +21,26 @@ import pyotp
 import qrcode
 import io
 import base64
-from tensorflow.keras.models import load_model, model_from_config
-import h5py
-import json
+from tensorflow.keras.models import load_model
 import jwt
 import requests
 import re
-import stripe
+
+# Load environment variables
+load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
 instance_path = os.path.join(os.path.dirname(__file__), 'instance')
 os.makedirs(instance_path, exist_ok=True)
 
-# Determine environment
-ENV = os.getenv('FLASK_ENV', 'production')
+# Determine environment (development or production)
+ENV = os.getenv('FLASK_ENV', 'production')  # Default to development if not set
 IS_PRODUCTION = ENV == 'production'
 
 app.config.update(
     SECRET_KEY=os.getenv('SECRET_KEY', 'your-secret-key'),
-    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', 'postgresql://secure_database_user:f8h1Rf8bYDGiA3Lwttef7kgDFRT68p2t@dpg-d02g5kje5dus73bonol0-a/secure_database'),
+    SQLALCHEMY_DATABASE_URI='postgresql://secure_database_user:f8h1Rf8bYDGiA3Lwttef7kgDFRT68p2t@dpg-d02g5kje5dus73bonol0-a/secure_database',
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     UPLOAD_FOLDER='static/uploads',
     ALLOWED_EXTENSIONS={'jpg', 'jpeg'},
@@ -67,48 +63,6 @@ login_manager.login_view = 'login'
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# Custom model loader to fix invalid layer names
-def load_model_with_fixed_names(filepath):
-    try:
-        with h5py.File(filepath, 'r') as f:
-            model_config = f.attrs.get('model_config')
-            if not model_config:
-                raise ValueError("No model configuration found in HDF5 file")
-            
-            # Parse the config
-            config = json.loads(model_config)
-            
-            # Fix layer names in the config
-            for layer in config['config']['layers']:
-                if 'name' in layer['config'] and '/' in layer['config']['name']:
-                    old_name = layer['config']['name']
-                    new_name = old_name.replace('/', '_')
-                    print(f"Renaming layer: {old_name} -> {new_name}")
-                    layer['config']['name'] = new_name
-            
-            # Create model from modified config
-            model = model_from_config(config)
-            
-            # Load weights
-            model.load_weights(filepath)
-            return model
-    except Exception as e:
-        print(f"Error loading model with fixed names: {str(e)}")
-        return None
-
-# Load the Keras model at startup
-model = None
-try:
-    model = load_model_with_fixed_names('models/model_ela.h5')
-    print("Model loaded successfully at startup")
-    # Test model with dummy input
-    if model is not None:
-        dummy_input = np.zeros((1, 128, 128, 3))
-        prediction = model.predict(dummy_input, verbose=0)
-        print("Model test prediction successful")
-except Exception as e:
-    print(f"Failed to load model: {str(e)}")
 
 # Models
 class User(db.Model, UserMixin):
@@ -247,10 +201,10 @@ class ImageForm(FlaskForm):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# reCAPTCHA verification
+# reCAPTCHA verification (only in production)
 def verify_recaptcha(token):
     if not IS_PRODUCTION:
-        return True
+        return True  # Bypass in development
     response = requests.post(
         'https://www.google.com/recaptcha/api/siteverify',
         data={
@@ -261,7 +215,7 @@ def verify_recaptcha(token):
     result = response.json()
     return result.get('success', False) and result.get('score', 0) >= 0.5
 
-# Routes
+# Routes with current_year added to all render_template calls
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -389,9 +343,6 @@ def dashboard():
             flash('Invalid session. Please log in again.', 'warning')
             return redirect(url_for('login'))
 
-    if model is None:
-        flash('Image analysis is currently unavailable due to model loading issues. Please contact support.', 'danger')
-
     form = ImageForm()
     config = Config.query.first() or Config(free_image_limit=5)
     if form.validate_on_submit():
@@ -417,38 +368,31 @@ def dashboard():
             is_outdoor=form.is_outdoor.data
         )
 
-        if model is None:
-            flash('Model not available. Please contact support.', 'danger')
-            return redirect(url_for('dashboard'))
+        model = load_model('models/model_ela.h5')
+        np_img, ela_img = prepare_image_for_ela(filepath)
+        prediction = model.predict(np_img, verbose=0)
+        class_ela = ['Real', 'Tampered']
+        predicted_class = class_ela[np.argmax(prediction[0])]
+        confidence = round(np.max(prediction[0]) * 100)
+        image.analysis_result = f"Model indicates {confidence}% confidence that image is {predicted_class}"
 
-        try:
-            np_img, ela_img = prepare_image_for_ela(filepath)
-            prediction = model.predict(np_img, verbose=0)
-            class_ela = ['Real', 'Tampered']
-            predicted_class = class_ela[np.argmax(prediction[0])]
-            confidence = round(np.max(prediction[0]) * 100)
-            image.analysis_result = f"Model indicates {confidence}% confidence that image is {predicted_class}"
+        ela_filename = f"ela_{unique_filename}"
+        ela_filepath = os.path.join(app.config['UPLOAD_FOLDER'], ela_filename)
+        ela_img.save(ela_filepath)
+        image.ela_filepath = ela_filepath
 
-            ela_filename = f"ela_{unique_filename}"
-            ela_filepath = os.path.join(app.config['UPLOAD_FOLDER'], ela_filename)
-            ela_img.save(ela_filepath)
-            image.ela_filepath = ela_filepath
+        if form.is_outdoor.data:
+            date_time, lat, lon, is_valid = image_coordinates(filepath)
+            if is_valid and lat and lon:
+                location, date, weather = get_weather(date_time, lat, lon)
+                image.weather_result = f"Image taken at {location} on {date} with {weather}"
+                image.latitude = lat
+                image.longitude = lon
+                image.location = location
 
-            if form.is_outdoor.data:
-                date_time, lat, lon, is_valid = image_coordinates(filepath)
-                if is_valid and lat and lon:
-                    location, date, weather = get_weather(date_time, lat, lon)
-                    image.weather_result = f"Image taken at {location} on {date} with {weather}"
-                    image.latitude = lat
-                    image.longitude = lon
-                    image.location = location
-
-            db.session.add(image)
-            db.session.commit()
-            flash('Image analyzed successfully.', 'success')
-        except Exception as e:
-            flash(f'Error analyzing image: {str(e)}', 'danger')
-            return redirect(url_for('dashboard'))
+        db.session.add(image)
+        db.session.commit()
+        flash('Image analyzed successfully.', 'success')
 
     images = Image.query.filter_by(user_id=current_user.id).order_by(Image.upload_date.desc()).limit(10).all()
     return render_template('dashboard.html', form=form, images=images, is_premium=current_user.is_premium_user(), current_year=datetime.utcnow().year)
@@ -552,4 +496,4 @@ with app.app_context():
         db.session.commit()
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=not IS_PRODUCTION)
+    app.run(port=5000, debug=True)
