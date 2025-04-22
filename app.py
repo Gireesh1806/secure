@@ -43,7 +43,7 @@ IS_PRODUCTION = ENV == 'production'
 
 app.config.update(
     SECRET_KEY="eb5309bed65e17d8c9ac293f2e245f6ab30979d69e338dd3",
-    SQLALCHEMY_DATABASE_URI='postgresql://secure_database_user:f8h1Rf8bYDGiA3Lwttef7kgDFRT68p2t@dpg-d02g5kje5dus73bonol0-a.oregon-postgres.render.com/secure_database',
+    SQLALCHEMY_DATABASE_URI='postgresql://secure_sx88_user:I6Wdds9mxg256ADuFpii9QXP7SAIuZop@dpg-d03j2mje5dus73abjdu0-a.oregon-postgres.render.com/secure_sx88',
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     UPLOAD_FOLDER='static/uploads',
     ALLOWED_EXTENSIONS={'jpg', 'jpeg'},
