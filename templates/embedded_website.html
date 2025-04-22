@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Embedded Website{% endblock %}
+
+{% block content %}
+<style>
+    .embedded-website {
+        background: #fff;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .embedded-website iframe {
+        width: 100%;
+        height: 600px;
+        border: none;
+        border-radius: 4px;
+    }
+
+    .status {
+        font-weight: bold;
+        margin: 1rem 0;
+        color: {{ '#27ae60' if is_premium else '#e74c3c' }};
+    }
+</style>
+
+<div class="embedded-website">
+    <h2>Embedded Website</h2>
+    <p class="status">Subscription Status: {{ 'Premium' if is_premium else 'Free' }}</p>
+    {% if is_premium %}
+        <p>Enjoy unlimited access to the embedded website!</p>
+    {% else %}
+        <p>Free users have {{ free_access_limit }} accesses per month. Remaining: {{ free_access_limit - current_user.website_access_count }}</p>
+        <p><a href="{{ url_for('subscription') }}">Upgrade to Premium</a> for unlimited access!</p>
+    {% endif %}
+    <iframe src="{{ website_url }}" title="Embedded Website"></iframe>
+</div>
+{% endblock %}
