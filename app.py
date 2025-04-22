@@ -454,16 +454,17 @@ try:
             logger.warning(f"Invalid MFA code for user {user.id}")
         return render_template('mfa.html', form=form, setup=False, current_year=datetime.utcnow().year)
 
-    @app.route('/logout')
-    @login_required
-    def logout():
-        logger.debug("Handling logout route")
-        if IS_PRODUCTION:
-            session.pop('jwt_token', None)
-        logout_user()
-        flash('Logged out successfully.', 'success')
-        logger.info(f"User {current_user.id} logged out")
-        return redirect(url_for('index'))
+@app.route('/logout')
+@login_required
+def logout():
+    logger.debug("Handling logout route")
+    user_id = current_user.id  # Store user ID before logout
+    if IS_PRODUCTION:
+        session.pop('jwt_token', None)
+    logout_user()
+    flash('Logged out successfully.', 'success')
+    logger.info(f"User {user_id} logged out")  # Use stored user_id
+    return redirect(url_for('index'))
 
     @app.route('/dashboard', methods=['GET', 'POST'])
     @login_required
